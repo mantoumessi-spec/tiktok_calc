@@ -7,7 +7,7 @@ import altair as alt
 
 # ================= 1. 页面基础配置 =================
 st.set_page_config(
-    page_title="TikTok 利润全自动测算系统 (Web版)",
+    page_title="华青TikTok 利润测算系统 (Web版)",
     page_icon="💰",
     layout="wide",
     initial_sidebar_state="expanded" 
@@ -539,7 +539,7 @@ def load_uploaded_files(uploaded_files):
 
 # ================= 8. 主程序 =================
 def main():
-    st.title("🚀 TikTok 利润全自动测算仪表盘 (Web协同版)")
+    st.title("🚀 华青ikTok 利润测算仪表盘 (Web协同版)")
     
     # --- 侧边栏：上传与设置 ---
     with st.sidebar:
