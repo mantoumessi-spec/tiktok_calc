@@ -539,7 +539,7 @@ def load_uploaded_files(uploaded_files):
 
 # ================= 8. 主程序 =================
 def main():
-    st.title("🚀 华青ikTok 利润测算仪表盘 (Web协同版)")
+    st.title("🚀 华青TikTok 利润测算仪表盘 (Web协同版)")
     
     # --- 侧边栏：上传与设置 ---
     with st.sidebar:
