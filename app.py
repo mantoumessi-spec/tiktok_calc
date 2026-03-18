@@ -23,7 +23,7 @@ from manual_content import (
 
 # ================= 1. 页面基础配置 =================
 st.set_page_config(
-    page_title="TikTok AI运营系统（利润&广告&达人）",
+    page_title="TikTok AI运营系统-0318",
     page_icon="💰",
     layout="wide",
     initial_sidebar_state="expanded"
