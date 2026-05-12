@@ -413,6 +413,7 @@ if start_btn and all_ready:
                 'spu_map': spu_map_file, 'sku_category_map': sku_cat_file,
                 'pid_sku_map': pid_sku_file,
                 'orders': orders_file, 'purchase': purchase_file,
+                'first_mile': purchase_file,  # 头程成本与采购成本在同一文件
                 'last_mile': lastmile_file, 'tariff': tariff_file,
                 'affiliate': affiliate_file, 'ads': ads_file,
                 'excluded_orders': excluded_file,
