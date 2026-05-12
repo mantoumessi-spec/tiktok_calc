@@ -241,7 +241,7 @@ def extract_value_rows(df, id_col):
 
 def render_detail_table(df):
     """渲染紧凑详情表格（所有列在一屏内显示，无滚动条）"""
-    cols = df.columns.tolist()
+    cols = [c for c in df.columns if c != '备注']
     header_cells = ''.join(
         f'<th style="padding:2px 3px; font-size:9px; text-align:center; white-space:nowrap; '
         f'background:#2c3e50; color:white; font-weight:500; border:1px solid #3d566e;">{c}</th>'
@@ -258,9 +258,53 @@ def render_detail_table(df):
     return f'<table style="width:100%; border-collapse:collapse;">{header_cells}{body_rows}</table>'
 
 
+def render_sku_cost_validation(df):
+    """渲染SKU成本完整性校验（含结论文字和标黄缺失项）"""
+    if df.empty:
+        return "暂无SKU成本数据", ""
+
+    total = len(df)
+    complete = len(df[df['状态'] == '完整'])
+    incomplete = len(df[df['状态'] == '缺失'])
+
+    conclusion = f"📊 店铺订单中总共 <b>{total}</b> 个SKU，其中 <b>{complete}</b> 个SKU成本完整性100%"
+    if incomplete > 0:
+        missing_details = []
+        for _, row in df[df['状态'] == '缺失'].iterrows():
+            sku = row['Seller SKU']
+            missing = []
+            if row['有采购成'] != '√': missing.append('采购成本')
+            if row['有头程成'] != '√': missing.append('头程成本')
+            if row['有尾程成'] != '√': missing.append('尾程成本')
+            if row['有关税成'] != '√': missing.append('关税成本')
+            missing_details.append(f"• <b>{sku}</b> 缺乏 {', '.join(missing)}")
+        conclusion += f"，<b>{incomplete}</b> 个SKU存在成本缺失：<br><br>" + "<br>".join(missing_details)
+    conclusion += "<br><br>"
+
+    cols = df.columns.tolist()
+    header = ''.join(
+        f'<th style="padding:6px 10px; background:#2c3e50; color:white; font-size:13px; text-align:center;">{c}</th>'
+        for c in cols
+    )
+
+    rows_html = ''
+    for _, row in df.iterrows():
+        cells = ''
+        for col in cols:
+            val = str(row.get(col, ''))
+            style = 'padding:6px 10px; font-size:13px; text-align:center; border-bottom:1px solid #f0f0f0;'
+            if col in ['有采购成', '有头程成', '有尾程成', '有关税成'] and val != '√':
+                style += ' background:#fff3cd; color:#856404; font-weight:600;'
+            cells += f'<td style="{style}">{val}</td>'
+        rows_html += f'<tr>{cells}</tr>'
+
+    table_html = f'<table style="width:100%; border-collapse:collapse;">{header}{rows_html}</table>'
+    return conclusion, table_html
+
+
 def render_store_table(df):
     """渲染店铺利润汇总HTML表格（参考图片排版）"""
-    cols = df.columns.tolist()
+    cols = [c for c in df.columns if c != '备注']
     # 表头
     header_cells = ''.join(
         f'<th style="padding:10px 8px; text-align:center; font-weight:600; font-size:13px; white-space:nowrap;">{c}</th>'
@@ -311,6 +355,9 @@ def render_store_table(df):
 
 def render_item_cards(df, id_col, title):
     """渲染SPU/类目卡片列表（含筛选排序交互控件）"""
+    # 过滤备注列
+    if '备注' in df.columns:
+        df = df.drop(columns=['备注'])
     # 提取数值行和占比行
     value_rows = extract_value_rows(df, id_col)
     pct_rows = []
@@ -391,7 +438,7 @@ def render_item_cards(df, id_col, title):
         revenue = row.get('退款前营收', 0)
         net_revenue = row.get('退款后营收', 0)
         pct_row = row.get('_pct_row', pd.Series())
-        revenue_pct = str(pct_row.get('营收占比', '—')) if hasattr(pct_row, 'get') else '—'
+        revenue_pct = str(row.get('营收占比', '—'))
 
         # 计算衍生指标
         ad_spend = row.get('广告费', 0)
@@ -771,11 +818,30 @@ if st.session_state.calculated and st.session_state.result is not None:
 
     with tab4:
         validation = st.session_state.validation
-        st.markdown("**SKU成本完整性**")
-        st.dataframe(validation['sku_cost'], use_container_width=True, hide_index=True)
-        st.markdown("**联盟佣金校验**")
+
+        # SKU成本完整性
+        st.markdown("#### 🔍 SKU成本完整性")
+        sku_conclusion, sku_table = render_sku_cost_validation(validation['sku_cost'])
+        st.markdown(sku_conclusion, unsafe_allow_html=True)
+        st.markdown(sku_table, unsafe_allow_html=True)
+
+        st.divider()
+
+        # 联盟佣金校验
+        st.markdown("#### 💰 联盟佣金校验")
         st.dataframe(validation['affiliate'], use_container_width=True, hide_index=True)
-        st.markdown("**广告费校验**")
+
+        st.divider()
+
+        # 广告费校验
+        st.markdown("#### 📢 广告费校验")
         st.dataframe(validation['ads'], use_container_width=True, hide_index=True)
-        st.markdown("**其他校验**")
+        if not validation['ads_unmapped'].empty:
+            st.markdown("**广告费未匹配明细：**")
+            st.dataframe(validation['ads_unmapped'], use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # 其他校验
+        st.markdown("#### 📋 其他校验")
         st.dataframe(validation['other'], use_container_width=True, hide_index=True)
