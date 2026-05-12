@@ -239,6 +239,25 @@ def extract_value_rows(df, id_col):
     return df.iloc[[0]].reset_index(drop=True)
 
 
+def render_detail_table(df):
+    """渲染紧凑详情表格（所有列在一屏内显示，无滚动条）"""
+    cols = df.columns.tolist()
+    header_cells = ''.join(
+        f'<th style="padding:2px 3px; font-size:9px; text-align:center; white-space:nowrap; '
+        f'background:#2c3e50; color:white; font-weight:500; border:1px solid #3d566e;">{c}</th>'
+        for c in cols
+    )
+    body_rows = ''
+    for i, row in df.iterrows():
+        cells = ''.join(
+            f'<td style="padding:2px 3px; font-size:9px; text-align:center; white-space:nowrap; '
+            f"border-bottom:1px solid #f0f0f0; {'background:#fafafa;' if i % 2 == 1 else ''}\">{v}</td>"
+            for v in row
+        )
+        body_rows += f'<tr>{cells}</tr>'
+    return f'<table style="width:100%; border-collapse:collapse;">{header_cells}{body_rows}</table>'
+
+
 def render_store_table(df):
     """渲染店铺利润汇总HTML表格（参考图片排版）"""
     cols = df.columns.tolist()
@@ -423,7 +442,7 @@ def render_item_cards(df, id_col, title):
         orig_idx = row.get('_orig_idx', 0)
         detail_df = df.iloc[orig_idx:orig_idx+2].reset_index(drop=True)
         with st.expander("📋 查看完整数据"):
-            st.dataframe(detail_df, use_container_width=True, hide_index=True)
+            st.markdown(render_detail_table(detail_df), unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
