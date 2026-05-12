@@ -228,6 +228,205 @@ def generate_excel_report(result, validation, report_period, params_info):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# 渲染辅助函数
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def extract_value_rows(df, id_col):
+    """从2行/3行矩阵中提取数值行（id_col非空的行为数值行）"""
+    if id_col in df.columns:
+        mask = df[id_col].notna() & (df[id_col].astype(str).str.strip() != '')
+        return df[mask].reset_index(drop=True)
+    return df.iloc[[0]].reset_index(drop=True)
+
+
+def render_store_table(df):
+    """渲染店铺利润汇总HTML表格（参考图片排版）"""
+    cols = df.columns.tolist()
+    # 表头
+    header_cells = ''.join(
+        f'<th style="padding:10px 8px; text-align:center; font-weight:600; font-size:13px; white-space:nowrap;">{c}</th>'
+        for c in cols
+    )
+    # 数据行
+    body_rows = []
+    for i, row in df.iterrows():
+        cells = []
+        for col in cols:
+            val = row.get(col, '')
+            if i == 0:
+                # 数值行：粗体，金额加$
+                style = 'padding:10px 8px; text-align:center; font-weight:600; font-size:14px;'
+                display = val
+            elif i == 1:
+                # 同比行：绿色小字
+                style = 'padding:6px 8px; text-align:center; color:#4caf50; font-size:12px;'
+                display = val
+            else:
+                # 占比行：灰色小字
+                style = 'padding:6px 8px; text-align:center; color:#999; font-size:12px;'
+                display = val
+            # 毛利率和毛利润高亮
+            if col == '毛利率' and i == 2 and str(val).replace('%', '').replace('-', '').replace('.', '').strip():
+                try:
+                    v = float(str(val).replace('%', ''))
+                    color = '#4caf50' if v > 0 else '#f44336'
+                    style = style.replace('color:#999', f'color:{color}')
+                    style += ' font-weight:700;'
+                except:
+                    pass
+            cells.append(f'<td style="{style}">{display}</td>')
+        body_rows.append('<tr style="border-bottom:1px solid #f0f0f0;">' + ''.join(cells) + '</tr>')
+
+    html = f'''
+    <table style="width:100%; border-collapse:collapse; font-size:14px; margin:10px 0;">
+        <thead>
+            <tr style="background:#2c3e50; color:white;">{header_cells}</tr>
+        </thead>
+        <tbody>
+            {''.join(body_rows)}
+        </tbody>
+    </table>
+    '''
+    return html
+
+
+def render_item_cards(df, id_col, title):
+    """渲染SPU/类目卡片列表（含筛选排序交互控件）"""
+    # 提取数值行和占比行
+    value_rows = extract_value_rows(df, id_col)
+    pct_rows = []
+    for idx in value_rows.index:
+        # 占比行在数值行之后
+        if idx + 1 < len(df):
+            pct_rows.append(df.iloc[idx + 1])
+        else:
+            pct_rows.append(pd.Series())
+
+    # 转为DataFrame便于操作
+    records = []
+    for i, (vrow, prow) in enumerate(zip(value_rows.itertuples(index=False), pct_rows)):
+        vdict = vrow._asdict()
+        vdict['_pct_row'] = prow
+        vdict['_orig_idx'] = value_rows.index[i]
+        records.append(vdict)
+
+    if not records:
+        st.info(f"暂无{title}数据")
+        return
+
+    rec_df = pd.DataFrame(records)
+
+    # 确保数值类型正确
+    numeric_cols = ['退款前营收', '退款后营收', '退款前销量', '退款后销量', '采购成本', '头程成本',
+                    '尾程成本', '关税成本', '联盟佣金', '广告费', '平台佣金', '其他费用', '样品费',
+                    '退款金额', '毛利润']
+    for c in numeric_cols:
+        if c in rec_df.columns:
+            rec_df[c] = pd.to_numeric(rec_df[c], errors='coerce').fillna(0)
+
+    # 计算利润率用于筛选
+    if '毛利率' in rec_df.columns:
+        rec_df['_margin_num'] = rec_df['毛利率'].apply(lambda x: float(str(x).replace('%', '')) if pd.notna(x) and str(x) != '—' else 0)
+    else:
+        rec_df['_margin_num'] = 0
+
+    # ── 筛选 & 排序控件 ─────────────────────────────────────────
+    ctrl1, ctrl2, ctrl3 = st.columns([2, 2, 3])
+
+    with ctrl1:
+        filter_type = st.segmented_control(
+            "筛选", ["全部", "盈利", "亏损"],
+            default="全部", key=f"{title}_filter"
+        )
+    with ctrl2:
+        sort_by = st.segmented_control(
+            "排序", ["按营收", "按销量"],
+            default="按营收", key=f"{title}_sort"
+        )
+
+    total = len(rec_df)
+    profit_count = len(rec_df[rec_df['毛利润'] > 0])
+    loss_count = len(rec_df[rec_df['毛利润'] < 0])
+
+    with ctrl3:
+        st.markdown(f"<div style='padding-top:28px; color:#666; font-size:13px;'>共 {total} 个 | 盈利 {profit_count} | 亏损 {loss_count}</div>", unsafe_allow_html=True)
+
+    # 筛选
+    if filter_type == "盈利":
+        rec_df = rec_df[rec_df['毛利润'] > 0]
+    elif filter_type == "亏损":
+        rec_df = rec_df[rec_df['毛利润'] < 0]
+
+    # 排序
+    if sort_by == "按营收":
+        rec_df = rec_df.sort_values('退款前营收', ascending=False)
+    else:
+        rec_df = rec_df.sort_values('退款后销量', ascending=False)
+
+    # ── 卡片列表 ─────────────────────────────────────────────────
+    for _, row in rec_df.iterrows():
+        name = row.get(id_col, '')
+        cat = row.get('三级类目', '')
+        profit = row.get('毛利润', 0)
+        margin_str = str(row.get('毛利率', '—'))
+        revenue = row.get('退款前营收', 0)
+        net_revenue = row.get('退款后营收', 0)
+        pct_row = row.get('_pct_row', pd.Series())
+        revenue_pct = str(pct_row.get('营收占比', '—')) if hasattr(pct_row, 'get') else '—'
+
+        # 计算衍生指标
+        ad_spend = row.get('广告费', 0)
+        refund_amt = row.get('退款金额', 0)
+        ad_ratio = ad_spend / net_revenue * 100 if net_revenue > 0 else 0
+        refund_ratio = refund_amt / revenue * 100 if revenue > 0 else 0
+
+        # 标签 & 颜色
+        is_profit = profit > 0
+        tag = "⭐ 主力产品" if is_profit else "⚠️ 亏损主力"
+        tag_bg = "#e3f2fd" if is_profit else "#ffebee"
+        tag_color = "#1976d2" if is_profit else "#d32f2f"
+        bar_color = "#4caf50" if is_profit else "#f44336"
+
+        # 利润率颜色
+        margin_val = row.get('_margin_num', 0)
+        margin_color = "#4caf50" if margin_val > 0 else "#f44336"
+
+        # 利润颜色
+        profit_color = "#4caf50" if profit > 0 else "#f44336"
+        profit_str = f"${profit:,.0f}" if profit >= 0 else f"-${abs(profit):,.0f}"
+
+        # 卡片HTML
+        card_html = f'''
+        <div style="border-left:4px solid {bar_color}; background:#fafafa; padding:12px 16px;
+                    margin:6px 0; border-radius:0 8px 8px 0;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <span style="background:{tag_bg}; color:{tag_color}; padding:2px 8px;
+                                border-radius:4px; font-size:12px; font-weight:500;">{tag}</span>
+                    <span style="font-weight:700; font-size:15px; color:#1f1f1f;">{name}</span>
+                    <span style="color:#666; font-size:13px;">{cat}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:14px; font-size:13px; flex-wrap:wrap;">
+                    <span style="background:#e3f2fd; color:#1976d2; padding:2px 10px;
+                                border-radius:12px; font-weight:500;">营收占比 {revenue_pct}</span>
+                    <span style="color:#888;">广告占比 {ad_ratio:.1f}%</span>
+                    <span style="color:#888;">退款率 {refund_ratio:.1f}%</span>
+                    <span style="color:{margin_color}; font-weight:700;">{margin_str}</span>
+                    <span style="color:{profit_color}; font-weight:700; font-size:15px;">{profit_str}</span>
+                </div>
+            </div>
+        </div>
+        '''
+        st.markdown(card_html, unsafe_allow_html=True)
+
+        # ── 展开详情：完整矩阵数据 ───────────────────────────────
+        orig_idx = row.get('_orig_idx', 0)
+        detail_df = df.iloc[orig_idx:orig_idx+2].reset_index(drop=True)
+        with st.expander("📋 查看完整数据"):
+            st.dataframe(detail_df, use_container_width=True, hide_index=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # 页面主体
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -265,8 +464,6 @@ spu_map_file = sku_cat_file = pid_sku_file = param_file = last_year_file = None
 orders_file = purchase_file = lastmile_file = tariff_file = affiliate_file = ads_file = excluded_file = None
 
 if upload_mode == "批量上传（推荐）":
-    st.info("💡 **操作提示**：打开「02-本期数据」和「01-基础数据」文件夹，按住 Cmd+A / Ctrl+A 全选所有 Excel 文件，然后拖拽到下方或点击上传")
-
     batch_files = st.file_uploader(
         "上传所有 Excel 文件（支持多选）",
         type=['xlsx', 'xls'],
@@ -540,19 +737,18 @@ if st.session_state.calculated and st.session_state.result is not None:
         use_container_width=True
     )
 
-    # ── 详细数据表格 ─────────────────────────────────────────────────────────
-    st.subheader("📋 详细数据")
-
-    tab1, tab2, tab3, tab4 = st.tabs(["店铺利润汇总", "SPU利润汇总", "三级类目利润汇总", "数据校验"])
+    # ── 详细数据 ─────────────────────────────────────────────────────────
+    tab1, tab2, tab3, tab4 = st.tabs(["📋 店铺利润汇总", "📦 SPU利润明细", "📂 三级类目利润明细", "🔍 数据校验"])
 
     with tab1:
-        st.dataframe(result.store_matrix, use_container_width=True, hide_index=True)
+        st.markdown("#### 📋 店铺利润汇总")
+        st.markdown(render_store_table(result.store_matrix), unsafe_allow_html=True)
 
     with tab2:
-        st.dataframe(result.spu_matrix, use_container_width=True, hide_index=True)
+        render_item_cards(result.spu_matrix, 'SPU', 'SPU')
 
     with tab3:
-        st.dataframe(result.category_matrix, use_container_width=True, hide_index=True)
+        render_item_cards(result.category_matrix, '三级类目', '三级类目')
 
     with tab4:
         validation = st.session_state.validation
