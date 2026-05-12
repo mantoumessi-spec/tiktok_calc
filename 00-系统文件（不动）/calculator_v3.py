@@ -755,17 +755,23 @@ class ProfitCalculator:
         return pd.DataFrame([row1, row2, row3])
 
     def _build_spu_matrix(self, current: pd.DataFrame, last_year: pd.DataFrame = None) -> pd.DataFrame:
-        """构建SPU维度2行矩阵（数值行 + 占比行）"""
+        """构建SPU维度3行矩阵（数值行 + 同比行 + 占比行）"""
         if current.empty:
             return pd.DataFrame()
 
         total_net_revenue = current['净销售收入'].sum()
+        ly_dict = {}
+        if last_year is not None and not last_year.empty:
+            for _, row in last_year.iterrows():
+                ly_dict[row['SPU']] = row
 
         rows = []
         for _, cur in current.iterrows():
             spu = cur['SPU']
+            ly = ly_dict.get(spu, {})
             net_revenue = cur.get('净销售收入', 0)
             cur_asp = cur.get('退款前营收', 0) / cur.get('退款前销量', 1) if cur.get('退款前销量', 0) > 0 else 0
+            ly_asp = ly.get('退款前营收', 0) / ly.get('退款前销量', 1) if ly.get('退款前销量', 0) > 0 else 0
 
             row1 = {
                 'SPU': spu, '三级类目': cur.get('三级类目', ''),
@@ -787,9 +793,21 @@ class ProfitCalculator:
                 '退款金额': round(cur.get('退款金额', 0), 2),
                 '毛利润': round(cur.get('毛利润', 0), 2),
                 '毛利率': f"{cur.get('毛利率', 0) * 100:.2f}%",
-                '备注': '',
             }
             row2 = {
+                'SPU': '', '三级类目': '', '营收占比': '',
+                '退款前营收': self._yoy(cur.get('退款前营收', 0), ly.get('退款前营收', None)),
+                '退款后营收': self._yoy(cur.get('退款后营收', 0), ly.get('退款后营收', None)),
+                'ASP': self._yoy(cur_asp, ly_asp),
+                '退款前销量': self._yoy(cur.get('退款前销量', 0), ly.get('退款前销量', None)),
+                '退款后销量': self._yoy(cur.get('净销售数量', 0), ly.get('净销售数量', None)),
+                '采购成本': '—', '头程成本': '—', '尾程成本': '—', '关税成本': '—',
+                '联盟佣金': '—', '广告费': '—', '平台佣金': '—', '其他费用': '—',
+                '样品费': '—',
+                '退款金额': self._yoy(cur.get('退款金额', 0), ly.get('退款金额', None)),
+                '毛利润': '—', '毛利率': '—',
+            }
+            row3 = {
                 'SPU': '', '三级类目': '', '营收占比': '',
                 '退款前营收': self._ratio(cur.get('退款前营收', 0), net_revenue),
                 '退款后营收': '100.0%', 'ASP': '—',
@@ -805,14 +823,14 @@ class ProfitCalculator:
                 '样品费': self._ratio(cur.get('样品费', 0), net_revenue),
                 '退款金额': self._ratio(cur.get('退款金额', 0), net_revenue),
                 '毛利润': f"{cur.get('毛利率', 0) * 100:.1f}%",
-                '毛利率': '—', '备注': '',
+                '毛利率': '—',
             }
-            rows.extend([row1, row2])
+            rows.extend([row1, row2, row3])
 
         return pd.DataFrame(rows)
 
     def _build_category_matrix(self, current: pd.DataFrame, last_year: pd.DataFrame = None) -> pd.DataFrame:
-        """构建三级类目维度2行矩阵（数值行 + 占比行）"""
+        """构建三级类目维度3行矩阵（数值行 + 同比行 + 占比行）"""
         if current.empty:
             return pd.DataFrame()
 
@@ -827,6 +845,17 @@ class ProfitCalculator:
         }).reset_index()
         cat_cur['毛利率'] = cat_cur.apply(lambda x: x['毛利润'] / x['净销售收入'] if x['净销售收入'] != 0 else 0, axis=1)
 
+        # 去年同期按三级类目汇总
+        ly_dict = {}
+        if last_year is not None and not last_year.empty:
+            cat_ly = last_year.groupby('三级类目').agg({
+                '退款前营收': 'sum', '退款后营收': 'sum', '退款金额': 'sum', '退款数量': 'sum',
+                '退款前销量': 'sum', '销售收入': 'sum', '销售数量': 'sum',
+                '净销售收入': 'sum', '净销售数量': 'sum', '样品数量': 'sum'
+            }).reset_index()
+            for _, row in cat_ly.iterrows():
+                ly_dict[row['三级类目']] = row
+
         total_net_revenue = cat_cur['净销售收入'].sum()
         rows = []
         for _, cur in cat_cur.iterrows():
@@ -835,8 +864,10 @@ class ProfitCalculator:
                 cat = '未分类'
             else:
                 cat = raw_cat
+            ly = ly_dict.get(raw_cat, {})
             net_revenue = cur.get('净销售收入', 0)
             cur_asp = cur.get('退款前营收', 0) / cur.get('退款前销量', 1) if cur.get('退款前销量', 0) > 0 else 0
+            ly_asp = ly.get('退款前营收', 0) / ly.get('退款前销量', 1) if ly.get('退款前销量', 0) > 0 else 0
 
             row1 = {
                 '三级类目': cat,
@@ -858,9 +889,21 @@ class ProfitCalculator:
                 '退款金额': round(cur.get('退款金额', 0), 2),
                 '毛利润': round(cur.get('毛利润', 0), 2),
                 '毛利率': f"{cur.get('毛利率', 0) * 100:.2f}%",
-                '备注': '',
             }
             row2 = {
+                '三级类目': '', '营收占比': '',
+                '退款前营收': self._yoy(cur.get('退款前营收', 0), ly.get('退款前营收', None)),
+                '退款后营收': self._yoy(cur.get('退款后营收', 0), ly.get('退款后营收', None)),
+                'ASP': self._yoy(cur_asp, ly_asp),
+                '退款前销量': self._yoy(cur.get('退款前销量', 0), ly.get('退款前销量', None)),
+                '退款后销量': self._yoy(cur.get('净销售数量', 0), ly.get('净销售数量', None)),
+                '采购成本': '—', '头程成本': '—', '尾程成本': '—', '关税成本': '—',
+                '联盟佣金': '—', '广告费': '—', '平台佣金': '—', '其他费用': '—',
+                '样品费': '—',
+                '退款金额': self._yoy(cur.get('退款金额', 0), ly.get('退款金额', None)),
+                '毛利润': '—', '毛利率': '—',
+            }
+            row3 = {
                 '三级类目': '', '营收占比': '',
                 '退款前营收': self._ratio(cur.get('退款前营收', 0), net_revenue),
                 '退款后营收': '100.0%', 'ASP': '—',
@@ -876,9 +919,9 @@ class ProfitCalculator:
                 '样品费': self._ratio(cur.get('样品费', 0), net_revenue),
                 '退款金额': self._ratio(cur.get('退款金额', 0), net_revenue),
                 '毛利润': f"{cur.get('毛利率', 0) * 100:.1f}%",
-                '毛利率': '—', '备注': '',
+                '毛利率': '—',
             }
-            rows.extend([row1, row2])
+            rows.extend([row1, row2, row3])
 
         return pd.DataFrame(rows)
 

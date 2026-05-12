@@ -362,9 +362,9 @@ def render_item_cards(df, id_col, title):
     value_rows = extract_value_rows(df, id_col)
     pct_rows = []
     for idx in value_rows.index:
-        # 占比行在数值行之后
-        if idx + 1 < len(df):
-            pct_rows.append(df.iloc[idx + 1])
+        # 占比行在数值行之后第2行（数值/同比/占比 = 3行矩阵）
+        if idx + 2 < len(df):
+            pct_rows.append(df.iloc[idx + 2])
         else:
             pct_rows.append(pd.Series())
 
