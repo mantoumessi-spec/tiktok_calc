@@ -1,0 +1,40 @@
+# 数据文件（不上传GitHub，由用户通过网页上传）
+01-基础数据（年度更新）/
+02-本期数据（每次测算更新）/
+爆单猫测算结果_*/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python缓存
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Obsidian
+.obsidian/
+
+# 旧的本地入口（云端用app.py替代）
+启动测算.py
+
+# 已废弃的模块
+00-系统文件（不动）/html_report.py
+00-系统文件（不动）/requirements.txt
