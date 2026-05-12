@@ -252,30 +252,121 @@ with st.sidebar:
 # ── 文件上传区域 ─────────────────────────────────────────────────────────────
 st.subheader("📁 数据文件上传")
 
-upload_col1, upload_col2 = st.columns(2)
+# 上传模式切换
+upload_mode = st.radio(
+    "上传方式",
+    ["批量上传（推荐）", "单独上传"],
+    horizontal=True,
+    help="批量上传：打开文件夹，按住 Cmd+A（Mac）或 Ctrl+A（Windows）全选所有 Excel 文件，一次性上传"
+)
 
-with upload_col1:
-    st.markdown("**基础数据（年度更新）**")
-    spu_map_file = st.file_uploader("SPU-SKU映射表 *", type=['xlsx', 'xls'], key='spu_map')
-    sku_cat_file = st.file_uploader("SKU-三级类目映射 *", type=['xlsx', 'xls'], key='sku_cat')
-    pid_sku_file = st.file_uploader("PID-SKU映射表", type=['xlsx', 'xls'], key='pid_sku')
-    param_file = st.file_uploader("基础参数表 *", type=['xlsx', 'xls'], key='param')
-    last_year_file = st.file_uploader("2025年全年订单底表（用于同比）", type=['xlsx', 'xls'], key='last_year')
+# 初始化所有文件变量为None
+spu_map_file = sku_cat_file = pid_sku_file = param_file = last_year_file = None
+orders_file = purchase_file = lastmile_file = tariff_file = affiliate_file = ads_file = excluded_file = None
 
-with upload_col2:
-    st.markdown("**本期数据（每次测算更新）**")
-    orders_file = st.file_uploader("店铺订单 *", type=['xlsx', 'xls'], key='orders')
-    purchase_file = st.file_uploader("采购成本 *", type=['xlsx', 'xls'], key='purchase')
-    lastmile_file = st.file_uploader("尾程成本 *", type=['xlsx', 'xls'], key='lastmile')
-    tariff_file = st.file_uploader("关税成本 *", type=['xlsx', 'xls'], key='tariff')
-    affiliate_file = st.file_uploader("联盟订单 *", type=['xlsx', 'xls'], key='affiliate')
-    ads_file = st.file_uploader("广告订单 *", type=['xlsx', 'xls'], key='ads')
-    excluded_file = st.file_uploader("需排除的订单编号", type=['xlsx', 'xls'], key='excluded')
+if upload_mode == "批量上传（推荐）":
+    st.info("💡 **操作提示**：打开「02-本期数据」和「01-基础数据」文件夹，按住 Cmd+A / Ctrl+A 全选所有 Excel 文件，然后拖拽到下方或点击上传")
+
+    batch_files = st.file_uploader(
+        "上传所有 Excel 文件（支持多选）",
+        type=['xlsx', 'xls'],
+        accept_multiple_files=True,
+        key='batch_upload'
+    )
+
+    # 文件名到变量的映射（去掉扩展名匹配）
+    filename_map = {
+        'spu_sku映射表': 'spu_map',
+        'SKU-三级类目映射': 'sku_category',
+        'pid_sku映射表': 'pid_sku',
+        '基础参数表': 'param',
+        '2025年全年订单底表': 'last_year',
+        '店铺订单': 'orders',
+        '采购成本': 'purchase',
+        '尾程成本': 'lastmile',
+        '关税成本': 'tariff',
+        '联盟订单': 'affiliate',
+        '广告订单': 'ads',
+        '需排除的订单编号': 'excluded',
+    }
+
+    recognized = {}
+    unrecognized = []
+
+    if batch_files:
+        for f in batch_files:
+            name_no_ext = os.path.splitext(f.name)[0]
+            if name_no_ext in filename_map:
+                recognized[name_no_ext] = f
+            else:
+                # 尝试模糊匹配（去掉空格、特殊字符）
+                normalized = name_no_ext.replace(' ', '').replace('-', '').replace('_', '').lower()
+                matched = False
+                for key in filename_map:
+                    if normalized == key.replace(' ', '').replace('-', '').replace('_', '').lower():
+                        recognized[key] = f
+                        matched = True
+                        break
+                if not matched:
+                    unrecognized.append(f.name)
+
+        # 赋值给变量
+        spu_map_file = recognized.get('spu_sku映射表')
+        sku_cat_file = recognized.get('SKU-三级类目映射')
+        pid_sku_file = recognized.get('pid_sku映射表')
+        param_file = recognized.get('基础参数表')
+        last_year_file = recognized.get('2025年全年订单底表')
+        orders_file = recognized.get('店铺订单')
+        purchase_file = recognized.get('采购成本')
+        lastmile_file = recognized.get('尾程成本')
+        tariff_file = recognized.get('关税成本')
+        affiliate_file = recognized.get('联盟订单')
+        ads_file = recognized.get('广告订单')
+        excluded_file = recognized.get('需排除的订单编号')
+
+        # 显示识别结果
+        if recognized:
+            with st.expander(f"✅ 已识别 {len(recognized)} 个文件", expanded=True):
+                cols = st.columns(2)
+                base_files = [k for k in recognized if k in ['spu_sku映射表', 'SKU-三级类目映射', 'pid_sku映射表', '基础参数表', '2025年全年订单底表']]
+                current_files = [k for k in recognized if k not in base_files]
+                with cols[0]:
+                    st.markdown("**基础数据**")
+                    for name in base_files:
+                        st.markdown(f"<span style='color:green'>✓</span> {name}.xlsx", unsafe_allow_html=True)
+                with cols[1]:
+                    st.markdown("**本期数据**")
+                    for name in current_files:
+                        st.markdown(f"<span style='color:green'>✓</span> {name}.xlsx", unsafe_allow_html=True)
+
+        if unrecognized:
+            st.warning(f"⚠️ 以下文件无法自动识别，请检查文件名：{', '.join(unrecognized)}")
+
+else:
+    # 单独上传模式
+    upload_col1, upload_col2 = st.columns(2)
+
+    with upload_col1:
+        st.markdown("**基础数据（年度更新）**")
+        spu_map_file = st.file_uploader("SPU-SKU映射表 *", type=['xlsx', 'xls'], key='spu_map')
+        sku_cat_file = st.file_uploader("SKU-三级类目映射 *", type=['xlsx', 'xls'], key='sku_cat')
+        pid_sku_file = st.file_uploader("PID-SKU映射表", type=['xlsx', 'xls'], key='pid_sku')
+        param_file = st.file_uploader("基础参数表 *", type=['xlsx', 'xls'], key='param')
+        last_year_file = st.file_uploader("2025年全年订单底表（用于同比）", type=['xlsx', 'xls'], key='last_year')
+
+    with upload_col2:
+        st.markdown("**本期数据（每次测算更新）**")
+        orders_file = st.file_uploader("店铺订单 *", type=['xlsx', 'xls'], key='orders')
+        purchase_file = st.file_uploader("采购成本 *", type=['xlsx', 'xls'], key='purchase')
+        lastmile_file = st.file_uploader("尾程成本 *", type=['xlsx', 'xls'], key='lastmile')
+        tariff_file = st.file_uploader("关税成本 *", type=['xlsx', 'xls'], key='tariff')
+        affiliate_file = st.file_uploader("联盟订单 *", type=['xlsx', 'xls'], key='affiliate')
+        ads_file = st.file_uploader("广告订单 *", type=['xlsx', 'xls'], key='ads')
+        excluded_file = st.file_uploader("需排除的订单编号", type=['xlsx', 'xls'], key='excluded')
 
 # 自动读取上传的参数表并更新侧边栏
 if param_file is not None:
     params_from_file = read_base_params(param_file)
-    # 如果侧边栏值还是默认值，用文件值覆盖
     if st.session_state.param_rate == 7.1 and params_from_file['exchange_rate'] != 7.1:
         st.session_state.param_rate = params_from_file['exchange_rate']
     if st.session_state.param_commission == 0.09 and params_from_file['platform_commission_rate'] != 0.09:
@@ -298,7 +389,13 @@ with btn_col2:
     start_btn = st.button("🚀 开始测算", type="primary", disabled=not all_ready, use_container_width=True)
 
 if not all_ready:
-    missing = [k for k, v in required_files.items() if v is None]
+    missing_names = {
+        'spu_map': 'SPU-SKU映射表', 'sku_category_map': 'SKU-三级类目映射',
+        'orders': '店铺订单', 'purchase': '采购成本',
+        'last_mile': '尾程成本', 'tariff': '关税成本',
+        'affiliate': '联盟订单', 'ads': '广告订单',
+    }
+    missing = [missing_names.get(k, k) for k, v in required_files.items() if v is None]
     st.warning(f"⏳ 请上传以下必填文件后再开始测算：{', '.join(missing)}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
