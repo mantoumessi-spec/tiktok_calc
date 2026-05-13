@@ -232,11 +232,11 @@ def generate_excel_report(result, validation, report_period, params_info):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def extract_value_rows(df, id_col):
-    """从2行/3行矩阵中提取数值行（id_col非空的行为数值行）"""
+    """从3行矩阵中提取数值行（id_col非空的行为数值行），保留原始索引"""
     if id_col in df.columns:
         mask = df[id_col].notna() & (df[id_col].astype(str).str.strip() != '')
-        return df[mask].reset_index(drop=True)
-    return df.iloc[[0]].reset_index(drop=True)
+        return df[mask]  # 保留原始索引，用于后续iloc定位
+    return df.iloc[[0]]
 
 
 def render_detail_table(df):
@@ -248,11 +248,11 @@ def render_detail_table(df):
         for c in cols
     )
     body_rows = ''
-    for i, row in df.iterrows():
+    for i, (_, row) in enumerate(df.iterrows()):
         cells = ''.join(
             f'<td style="padding:2px 3px; font-size:9px; text-align:center; white-space:nowrap; '
-            f"border-bottom:1px solid #f0f0f0; {'background:#fafafa;' if i % 2 == 1 else ''}\">{v}</td>"
-            for v in row
+            f"border-bottom:1px solid #f0f0f0; {'background:#fafafa;' if i % 2 == 1 else ''}\">{row.get(c, '')}</td>"
+            for c in cols
         )
         body_rows += f'<tr>{cells}</tr>'
     return f'<table style="width:100%; border-collapse:collapse;">{header_cells}{body_rows}</table>'
