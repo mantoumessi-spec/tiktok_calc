@@ -487,7 +487,7 @@ def render_item_cards(df, id_col, title):
 
         # ── 展开详情：完整矩阵数据 ───────────────────────────────
         orig_idx = row.get('_orig_idx', 0)
-        detail_df = df.iloc[orig_idx:orig_idx+2].reset_index(drop=True)
+        detail_df = df.iloc[orig_idx:orig_idx+3].reset_index(drop=True)
         with st.expander("📋 查看完整数据"):
             st.markdown(render_detail_table(detail_df), unsafe_allow_html=True)
 
